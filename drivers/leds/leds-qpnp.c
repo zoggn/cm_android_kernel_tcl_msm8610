@@ -42,6 +42,7 @@
 #define WLED_MOD_CTRL_REG(base)			(base + 0x46)
 #define WLED_SYNC_REG(base)			(base + 0x47)
 #define WLED_FDBCK_CTRL_REG(base)		(base + 0x48)
+#define WLED_MOD_SCHEME_REG(base)		(base + 0x4A)
 #define WLED_BOOST_DUTY_REG(base)		(base + 0x4B)
 #define WLED_SWITCHING_FREQ_REG(base)		(base + 0x4C)
 #define WLED_OVP_CFG_REG(base)			(base + 0x4D)
@@ -74,6 +75,7 @@
 #define WLED_OP_FDBCK_BIT_SHFT		0x00
 #define WLED_OP_FDBCK_DEFAULT		0x00
 #define WLED_BOOST_DUTY_MASK		0x03
+#define WLED_MOD_SCHEME_MASK		0xFF
 
 #define WLED_MAX_LEVEL			4095
 #define WLED_8_BIT_MASK			0xFF
@@ -89,6 +91,7 @@
 
 #define WLED_DEFAULT_STRINGS		0x01
 #define WLED_DEFAULT_OVP_VAL		0x02
+#define WLED_DEFAULT_MOD_SCHEME	0x00
 #define WLED_DEFAULT_MAX_BOOST_DUTY	0x00
 #define WLED_BOOST_LIM_DEFAULT		0x03
 #define WLED_CP_SEL_DEFAULT		0x00
@@ -367,6 +370,7 @@ struct wled_config_data {
 	u8	op_fdbck;
 	u8	pmic_version;
 	u8	max_boost_duty;
+	u8	mod_scheme;
 	bool	dig_mod_gen_en;
 	bool	cs_out_en;
 };
@@ -1813,6 +1817,15 @@ static int __devinit qpnp_wled_init(struct qpnp_led_data *led)
 		return rc;
 	}
 
+	/* program modulation scheme register */
+	rc = qpnp_led_masked_write(led, WLED_MOD_SCHEME_REG(led->base),
+		WLED_MOD_SCHEME_MASK, led->wled_cfg->mod_scheme);
+	if (rc) {
+		dev_err(&led->spmi_dev->dev,
+				"WLED mod scheme reg write failed(%d)\n", rc);
+		return rc;
+	}
+
 	/* program current sink */
 	if (led->wled_cfg->cs_out_en) {
 		rc = qpnp_led_masked_write(led, WLED_CURR_SINK_REG(led->base),
@@ -2898,6 +2911,13 @@ static int __devinit qpnp_get_config_wled(struct qpnp_led_data *led,
 	rc = of_property_read_u32(node, "qcom,max-boost-duty", &val);
 	if (!rc)
 		led->wled_cfg->max_boost_duty = (u8) val;
+	else if (rc != -EINVAL)
+		return rc;
+
+	led->wled_cfg->mod_scheme = WLED_DEFAULT_MOD_SCHEME;
+	rc = of_property_read_u32(node, "qcom,mod-scheme", &val);
+	if (!rc)
+		led->wled_cfg->mod_scheme = (u8) val;
 	else if (rc != -EINVAL)
 		return rc;
 
