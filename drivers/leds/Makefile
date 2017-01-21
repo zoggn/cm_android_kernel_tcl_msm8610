@@ -31,6 +31,7 @@ obj-$(CONFIG_LEDS_CPLD)			+= leds-cpld.o
 obj-$(CONFIG_LEDS_HP6XX)		+= leds-hp6xx.o
 obj-$(CONFIG_LEDS_OT200)		+= leds-ot200.o
 obj-$(CONFIG_LEDS_FSG)			+= leds-fsg.o
+obj-$(CONFIG_AS3647)                    += leds-as364x.o
 obj-$(CONFIG_LEDS_PCA955X)		+= leds-pca955x.o
 obj-$(CONFIG_LEDS_MSM_PMIC)		+= leds-msm-pmic.o
 obj-$(CONFIG_LEDS_PCA9633)		+= leds-pca9633.o
