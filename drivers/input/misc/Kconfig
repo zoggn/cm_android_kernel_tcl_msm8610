@@ -693,6 +693,33 @@ config SENSORS_MMA_POSITION
 	help
 	  this provide the sensor position setting , value is between 0~7
 
+config SENSORS_BMA2X2
+	tristate "BMA255/BMA250E/BMA222E/BMA280 acceleration sensor support"
+	depends on I2C=y
+	help
+	  If you say yes here you get support for Bosch Sensortec's 
+	  acceleration sensors BMA255/BMA250E/BMA222E/BMA280.
+
+config EMODE_GPIO
+	tristate "engineer mode gpio test support"
+	depends on I2C=y
+	help
+	  Say Y here you want to enable engineer mode gpio test
+
+config SENSORS_BMA2X2_ENABLE_INT1
+	tristate "BMA2X2 acceleration sensor interrupt INT1 support"
+	depends on SENSORS_BMA2X2=y
+	help
+	  If you say yes here you get INT1 support for Bosch Sensortec's 
+	  acceleration sensors BMA2X2.
+
+config BOSCH_BMA2X2_ENABLE_INT2
+	tristate "BMA2X2 acceleration sensor interrupt INT2 support"
+	depends on BOSCH_BMA2X2=y
+	help
+	  If you say yes here you get INT2 support for Bosch Sensortec's 
+	  acceleration sensors BMA2X2.
+
 config SENSORS_STK3X1X
 	tristate "STK3X1X device driver"
 	depends on I2C
@@ -714,4 +741,11 @@ config SENSORS_CAPELLA_CM36283
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called CM36283.
+
+config SENSORS_HSCDTD007A
+	tristate "hscdtd007a Geomagnetic sensor support"
+	depends on I2C=y
+	help
+	  If you say yes here you get support for ALPS electric's 
+	  Geomagnetic sensors MMC3416xPJ.
 endif

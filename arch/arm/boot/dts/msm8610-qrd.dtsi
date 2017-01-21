@@ -139,34 +139,51 @@
 			kionix,negate-z;
 			kionix,res-12bit;
 		};
-//[ECID:000000] ZTEBSP wanghaifei 20130905 start, for sensor
-		lis3dh@19 {
-			compatible = "st,lis3dh";
-			reg = <0x19>;
-			//interrupt-parent = <&msmgpio>;
-			//interrupts = <81 0x2>;
+		bma2x2@18 { 
+		    compatible = "bosch,bma2x2";
+			reg = <0x18>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <81 0x2>;
 			vdd-supply = <&pm8110_l19>;
 			vio-supply = <&pm8110_l14>;
-			st,gpio-irq1 = <&msmgpio 81 0>;
-			st,gpio-irq2 = <&msmgpio 82 0>;
-			st,min-interval = <5>;
-			st,poll-interval = <100>;
-			st,axis-map-x = <0>;
-			st,axis-map-y = <1>;
-			st,axis-map-z = <2>;
-			st,g-range = <2>;
-			//st,negate-x;
-			//st,negate-y;
-			//st,negate-z;
+			/*gpios = <&msmgpio 81 0x01>,<&msmgpio 82 0x01>;*/			
 		};
-		taos@39 {
-			compatible = "taos,tmd277x";
+		stk3x1x@48 {
+			compatible = "stk,stk3x1x";
+			reg = <0x48>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <80 0x2>;
+			vdd-supply = <&pm8110_l19>;
+			vio-supply = <&pm8110_l14>;
+			stk,irq-gpio = <&msmgpio 80 0x02>;
+			stk,transmittance = <250>;
+			stk,state-reg = <0x00>;
+			stk,psctrl-reg = <0x31>;
+			stk,alsctrl-reg = <0x3A>;
+			stk,ledctrl-reg = <0xFF>;
+			stk,wait-reg = <0x07>;
+			stk,ps-thdh = <1000>;
+			stk,ps-thdl = <900>;
+			stk,use-fir;
+		};	
+		tsl2772@39 { 
+		    compatible = "taos,tsl2772";
 			reg = <0x39>;
+			interrupt-parent = <&msmgpio>;
+			interrupts = <80 0x2>;
 			vdd-supply = <&pm8110_l19>;
 			vio-supply = <&pm8110_l14>;
-			gpios = <&msmgpio 80 0>;
+			gpios = <&msmgpio 80 0x02>;
 		};
-//[ECID:000000] ZTEBSP wanghaifei 20130905 end, for sensor
+		hscdtd007a@c { 
+		    compatible = "alps,hscdtd007a";
+			reg = <0x0c>;
+			interrupt-parent = <&msmgpio>;
+			/*interrupts = <81 0x2>;*/
+			vdd-supply = <&pm8110_l14>;
+			/*vio-supply = <&pm8110_l14>;*/
+			/*gpios = <&msmgpio 81 0x01>,<&msmgpio 82 0x01>;*/			
+		};
 	};
 
 	flashlight {
