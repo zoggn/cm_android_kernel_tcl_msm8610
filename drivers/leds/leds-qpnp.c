@@ -25,7 +25,12 @@
 #include <linux/workqueue.h>
 #include <linux/delay.h>
 #include <linux/regulator/consumer.h>
+#include <linux/of_gpio.h> // add by shicuiping for gpio control led
 #include <linux/delay.h>
+
+#include <linux/sched.h>//add by yusen.ke.sz@tcl.com at 20140415 for debug
+#include <linux/proc_fs.h> //add by yusen.ke.sz@tcl.com at 20140414 for display backlight level
+
 
 #define WLED_MOD_EN_REG(base, n)	(base + 0x60 + n*0x10)
 #define WLED_IDAC_DLY_REG(base, n)	(WLED_MOD_EN_REG(base, n) + 0x01)
@@ -136,11 +141,11 @@
 #define	FLASH_SELFCHECK_ENABLE		0x80
 #define FLASH_RAMP_STEP_27US		0xBF
 
-#define FLASH_HW_SW_STROBE_SEL_MASK	0x04
+#define FLASH_STROBE_SW			0xC0
+#define FLASH_STROBE_HW			0x04
 #define FLASH_STROBE_MASK		0xC7
 #define FLASH_LED_0_OUTPUT		0x80
 #define FLASH_LED_1_OUTPUT		0x40
-#define FLASH_TORCH_OUTPUT		0xC0
 
 #define FLASH_CURRENT_PRGM_MIN		1
 #define FLASH_CURRENT_PRGM_SHIFT	1
@@ -235,6 +240,7 @@ enum qpnp_leds {
 	QPNP_ID_RGB_BLUE,
 	QPNP_ID_LED_MPP,
 	QPNP_ID_KPDBL,
+	QPNP_ID_GPIO, // add by shicuiping for gpio control led
 	QPNP_ID_MAX,
 };
 
@@ -255,7 +261,7 @@ enum wled_ovp_threshold {
 	WLED_OVP_35V,
 	WLED_OVP_32V,
 	WLED_OVP_29V,
-	WLED_OVP_27V,
+	WLED_OVP_37V,
 };
 
 enum flash_headroom {
@@ -277,6 +283,12 @@ enum led_mode {
 	LPG_MODE,
 	MANUAL_MODE,
 };
+
+// add by xcb for power off alarm bug id 585101
+extern bool alarm_boot_mode;
+
+ int iLevel =0;//add by yusen.ke.sz@tcl.com at 20140420 for debug
+
 
 static u8 wled_debug_regs[] = {
 	/* common registers */
@@ -375,7 +387,9 @@ struct mpp_config_data {
 	u8	min_brightness;
 	u8 pwm_mode;
 };
-
+struct gpio_config_data { // add by shicuiping for gpio control led
+	u8	gpio_num;
+};
 /**
  *  flash_config_data - flash configuration data
  *  @current_prgm - current to be programmed, scaled by max level
@@ -478,6 +492,7 @@ struct qpnp_led_data {
 	struct kpdbl_config_data	*kpdbl_cfg;
 	struct rgb_config_data	*rgb_cfg;
 	struct mpp_config_data	*mpp_cfg;
+	struct gpio_config_data	*gpio_cfg; // add by shicuiping for gpio control led
 	int			max_current;
 	bool			default_on;
 	int			turn_off_delay_ms;
@@ -710,10 +725,22 @@ static int qpnp_mpp_set(struct qpnp_led_data *led)
 		}
 		if (led->mpp_cfg->pwm_mode == PWM_MODE) {
 			pwm_disable(led->mpp_cfg->pwm_cfg->pwm_dev);
+			// add by shicuiping for blink start
+			if( led->mpp_cfg->pwm_cfg->use_blink &&(led->cdev.brightness<LED_FULL))
+				duty_us = led->cdev.blink_delay_on *1000;
+			else
+			// add by shicuiping for blink stop
 			duty_us = (led->mpp_cfg->pwm_cfg->pwm_period_us *
 					led->cdev.brightness) / LED_FULL;
+			// add by shicuiping for blink start
+			if(led->mpp_cfg->pwm_cfg->use_blink&&(duty_us==led->mpp_cfg->pwm_cfg->pwm_period_us))
+			{
+				led->mpp_cfg->pwm_cfg->pwm_period_us =27;
+				duty_us =27;
+			}
+			// add by shicuiping for blink stop
 			/*config pwm for brightness scaling*/
-			rc = pwm_config_us(led->mpp_cfg->pwm_cfg->pwm_dev,
+			rc = pwm_config(led->mpp_cfg->pwm_cfg->pwm_dev,
 					duty_us,
 					led->mpp_cfg->pwm_cfg->pwm_period_us);
 			if (rc < 0) {
@@ -797,6 +824,205 @@ static int qpnp_mpp_set(struct qpnp_led_data *led)
 
 	return 0;
 }
+
+//add by yusen.ke.sz@tcl.com at 20140420 for display backlight brightness begin
+static int ts_switch_read(char *page, char **start, off_t off,
+			       int count, int *eof, void *data)
+{
+  int len = 0;
+
+  len += sprintf(page + len, "%d\n",iLevel);
+   	if (len <= off+count)
+		*eof = 1;
+
+	*start = page + off;
+	len -= off;
+	if (len > count)
+		len = count;
+	if (len < 0)
+		len = 0;
+
+	return len;
+   
+}
+
+static void init_adb_proc(void)
+{
+	struct proc_dir_entry *ts_switch_file;
+	
+	ts_switch_file = create_proc_read_entry("backlight_level", 0, NULL, ts_switch_read,NULL);
+	if (ts_switch_file) {
+		printk(KERN_ERR "backlight_level: init_log_proc create_proc_entry success\n");
+	} 
+	else
+		printk(KERN_ERR "backlight_level: init_log_proc create_proc_entry fails\n");
+
+
+}
+
+//add by yusen.ke.sz@tcl.com at 20140420 for display backlight brightness  end
+
+
+// Added by Xiaodong.Chen at 2013.12.12 for control backlight
+#define BRIGHTNESS_MAX_SIZE 30
+//extern bool panel_on_flag; //del by yusen.ke.sz@tcl.com for try to fix backlight blink when resume issue
+
+static int qpnp_gpio_set_one_wire(struct qpnp_led_data *led)
+{
+	static int bl_level_l = 0; // Added by Xiaodong.Chen at 2014.1.24 for avoid repeat set brightness level
+	static int first_boot = 1; // 1: the first time bootup kernel
+	unsigned char addr = 0x72; // 0111 0010
+	unsigned long flags;
+	int tl, th, i;
+	int bl_level;
+
+	bl_level = (int)(led->cdev.brightness * BRIGHTNESS_MAX_SIZE / led->cdev.max_brightness);
+	if (bl_level >= BRIGHTNESS_MAX_SIZE) {
+		bl_level = BRIGHTNESS_MAX_SIZE - 1;
+	}
+	
+	//pr_warn("%s, brightness: %d, level:%d\n", __func__, led->cdev.brightness, bl_level);//add by yusen.ke.sz@tcl.com at 20140417 for debug
+	local_irq_save(flags);
+
+	if ((bl_level_l <= 0) && (first_boot == 0)){
+		pr_warn("%s, backlight on ,current backlight level = %d ---\n", __func__ ,bl_level); //baoqiang add to fix led bug 0211//modify by yusen.ke.sz@tcl.com at20140401
+		gpio_direction_output(led->gpio_cfg->gpio_num, 1);
+		udelay(120); // greater than 260us
+		gpio_direction_output(led->gpio_cfg->gpio_num, 0);
+		udelay(300); // greater than 100us
+		gpio_direction_output(led->gpio_cfg->gpio_num, 1);
+		udelay(200);
+		//pr_warn("%s, initialize ic\n", __func__); //baoqiang.qin remove it to fix leds bug 0211
+	}
+	
+	if (bl_level <= 0) {
+		
+		pr_warn("%s, backlight off,Before backlight level = %d ---\n", __func__, bl_level_l); //baoqiang.qin add to fix leds bug 0211//modify by yusen.ke.sz@tcl.com at20140401
+		first_boot = 0;
+		
+		gpio_direction_output(led->gpio_cfg->gpio_num, 0);
+		mdelay(3);
+		bl_level_l = bl_level; // reset static variable 'bl_level_l'
+		//pr_warn("%s, deinitialize ic\n", __func__);//baoqiang.qin move to front
+		goto EXIT;
+	}
+//zrl modify for reslove the backlight blink between lk and kernel,140226,end
+
+	if (bl_level_l == bl_level) {
+		goto EXIT;
+	}
+	bl_level_l = bl_level;
+	// Added end
+	// Address transfer
+	for (i = 7; i >= 0; i--) {
+		if (addr & (0x01 << i)) {
+			tl = 40; // 2us ~ 180us(ktd2599) or 10us ~ 180us(sgm3733)
+			th = 100; // 2 * (tl)us ~ 360us
+		} else {
+			th = 40; // 2us ~ 180us(ktd2599) or 10us ~ 180us(sgm3733) 
+			tl = 100; // 2 * (th)us ~ 360us
+		}
+		gpio_direction_output(led->gpio_cfg->gpio_num, 0);
+		udelay(tl);
+		gpio_direction_output(led->gpio_cfg->gpio_num, 1);
+		udelay(th);
+	}
+	// EOS
+	gpio_direction_output(led->gpio_cfg->gpio_num, 0);
+	udelay(100); // 2us ~ 360us(ktd2599) or 10us ~ 360us(sgm3733)
+	
+	// Data transfer
+	// Start
+	gpio_direction_output(led->gpio_cfg->gpio_num, 1);
+	udelay(50); // ctrl start, greater than 2us(ktd2599) or 10us(sgm3733)
+	// Data
+	for (i = 7; i >= 0; i--) {
+		if (bl_level & (0x01 << i)) {
+			tl = 40; // 2us ~ 180us(ktd2599) or 10us ~ 180us(sgm3733)
+			th = 100; // 2 * (tl)us ~ 360us
+		} else {
+			th = 40; // 2us ~ 180us(ktd2599) or 10us ~ 180us(sgm3733)
+			tl = 100; // 2 * (th)us ~ 360us
+		}
+		gpio_direction_output(led->gpio_cfg->gpio_num, 0);
+		udelay(tl);
+		gpio_direction_output(led->gpio_cfg->gpio_num, 1);
+		udelay(th);
+	}
+	// EOS
+	gpio_direction_output(led->gpio_cfg->gpio_num, 0);
+	udelay(100); // 2us ~ 360us(ktd2599) or 10us ~ 360us(sgm3733)
+	// keep high level
+	gpio_direction_output(led->gpio_cfg->gpio_num, 1);
+EXIT:
+	local_irq_restore(flags);
+	iLevel = bl_level;//add by yusen.ke.sz@tcl.com at 20140420 for display backlight level
+	return 0;
+}
+// Added end
+
+// add by shicuiping for gpio control led start
+static int qpnp_gpio_set(struct qpnp_led_data *led)
+{
+#if 1 // Added by Xiaodong.Chen at 2013.12.12 for control backlight
+	qpnp_gpio_set_one_wire(led);
+#else
+	int bl_level, p_num;
+	unsigned long flags;
+
+	/*
+	* FIXME
+	* the initial value of bl_level_last is the
+	* uboot backlight level, it should be aligned.
+	*/
+	static int bl_level_last = 17;
+
+	/*
+	* Brightness is controlled by a series of pulses
+	* generated by gpio. It has 32 leves and level 1
+	* is the brightest. Pull low for 3ms makes
+	* backlight shutdown
+	*/
+	dev_warn(&led->spmi_dev->dev,"%s,led->cdev.brightness:%d\n",__func__,led->cdev.brightness);
+	bl_level = (255 - led->cdev.brightness) * 32 / 255 + 1;
+
+	if (bl_level == bl_level_last)
+		goto set_bl_return;
+
+	if (bl_level == 33) {
+		/* shutdown backlight */
+		gpio_direction_output(led->gpio_cfg->gpio_num, 0);
+
+		goto set_bl_return;
+	}
+
+	if (bl_level > bl_level_last)
+		p_num = bl_level - bl_level_last;
+	else
+		p_num = bl_level + 32 - bl_level_last;
+
+	//dev_warn(&led->spmi_dev->dev,"%s,pluse_num:%d,bl_level_last:%d,bl_level:%d\n",__func__,p_num,bl_level_last,bl_level);
+	local_irq_save(flags);
+	while (p_num--) {
+		gpio_direction_output(led->gpio_cfg->gpio_num, 0);
+		udelay(5);
+		gpio_direction_output(led->gpio_cfg->gpio_num, 1);
+		udelay(5);
+	}
+	local_irq_restore(flags);
+
+set_bl_return:
+
+	if (bl_level == 33) {
+		bl_level_last = 0;
+	}
+	else{
+		bl_level_last = bl_level;
+	}
+#endif	
+	return 0;
+}
+// add by shicuiping for gpio control led stop
 
 static int qpnp_flash_regulator_operate(struct qpnp_led_data *led, bool on)
 {
@@ -1001,13 +1227,6 @@ static int qpnp_flash_set(struct qpnp_led_data *led)
 				goto error_reg_write;
 			}
 
-			if (!led->flash_cfg->strobe_type)
-				led->flash_cfg->trigger_flash &=
-						~FLASH_HW_SW_STROBE_SEL_MASK;
-			else
-				led->flash_cfg->trigger_flash |=
-						FLASH_HW_SW_STROBE_SEL_MASK;
-
 			rc = qpnp_led_masked_write(led,
 				FLASH_LED_STROBE_CTRL(led->base),
 				led->flash_cfg->trigger_flash,
@@ -1087,22 +1306,30 @@ static int qpnp_flash_set(struct qpnp_led_data *led)
 			 */
 			usleep(FLASH_RAMP_UP_DELAY_US);
 
-			if (!led->flash_cfg->strobe_type)
-				led->flash_cfg->trigger_flash &=
-						~FLASH_HW_SW_STROBE_SEL_MASK;
-			else
-				led->flash_cfg->trigger_flash |=
-						FLASH_HW_SW_STROBE_SEL_MASK;
-
-			rc = qpnp_led_masked_write(led,
-				FLASH_LED_STROBE_CTRL(led->base),
-				led->flash_cfg->trigger_flash,
-				led->flash_cfg->trigger_flash);
-			if (rc) {
-				dev_err(&led->spmi_dev->dev,
-				"LED %d strobe reg write failed(%d)\n",
-				led->id, rc);
-				goto error_flash_set;
+			if (!led->flash_cfg->strobe_type) {
+				rc = qpnp_led_masked_write(led,
+					FLASH_LED_STROBE_CTRL(led->base),
+					led->flash_cfg->trigger_flash,
+					led->flash_cfg->trigger_flash);
+				if (rc) {
+					dev_err(&led->spmi_dev->dev,
+					"LED %d strobe reg write failed(%d)\n",
+					led->id, rc);
+					goto error_flash_set;
+				}
+			} else {
+				rc = qpnp_led_masked_write(led,
+					FLASH_LED_STROBE_CTRL(led->base),
+					(led->flash_cfg->trigger_flash |
+					FLASH_STROBE_HW),
+					(led->flash_cfg->trigger_flash |
+					FLASH_STROBE_HW));
+				if (rc) {
+					dev_err(&led->spmi_dev->dev,
+					"LED %d strobe reg write failed(%d)\n",
+					led->id, rc);
+					goto error_flash_set;
+				}
 			}
 		}
 	} else {
@@ -1238,7 +1465,7 @@ static int qpnp_kpdbl_set(struct qpnp_led_data *led)
 		if (led->kpdbl_cfg->pwm_cfg->mode == PWM_MODE) {
 			duty_us = (led->kpdbl_cfg->pwm_cfg->pwm_period_us *
 				led->cdev.brightness) / KPDBL_MAX_LEVEL;
-			rc = pwm_config_us(led->kpdbl_cfg->pwm_cfg->pwm_dev,
+			rc = pwm_config(led->kpdbl_cfg->pwm_cfg->pwm_dev,
 					duty_us,
 					led->kpdbl_cfg->pwm_cfg->pwm_period_us);
 			if (rc < 0) {
@@ -1260,7 +1487,7 @@ static int qpnp_kpdbl_set(struct qpnp_led_data *led)
 			led->kpdbl_cfg->pwm_cfg->default_mode;
 
 		if (led->kpdbl_cfg->always_on) {
-			rc = pwm_config_us(led->kpdbl_cfg->pwm_cfg->pwm_dev, 0,
+			rc = pwm_config(led->kpdbl_cfg->pwm_cfg->pwm_dev, 0,
 					led->kpdbl_cfg->pwm_cfg->pwm_period_us);
 			if (rc < 0) {
 				dev_err(&led->spmi_dev->dev,
@@ -1309,8 +1536,7 @@ static int qpnp_rgb_set(struct qpnp_led_data *led)
 		if (led->rgb_cfg->pwm_cfg->mode == PWM_MODE) {
 			duty_us = (led->rgb_cfg->pwm_cfg->pwm_period_us *
 				led->cdev.brightness) / LED_FULL;
-			rc = pwm_config_us(led->rgb_cfg->pwm_cfg->pwm_dev,
-					duty_us,
+			rc = pwm_config(led->rgb_cfg->pwm_cfg->pwm_dev, duty_us,
 					led->rgb_cfg->pwm_cfg->pwm_period_us);
 			if (rc < 0) {
 				dev_err(&led->spmi_dev->dev,
@@ -1365,7 +1591,15 @@ static void qpnp_led_set(struct led_classdev *led_cdev,
 
 	if (value > led->cdev.max_brightness)
 		value = led->cdev.max_brightness;
+	//pr_err("qpnp_led_set,led->id = %d,led->cdev.name = %s, led->cdev.brightness = %d\n" ,led->id,led->cdev.name,value);//add by yusen.ke.sz@tcl.com at 20140415 for debug
+	//printk(KERN_EMERG "Current task:%s(%d) Parent task:%s(%d)\n",current->comm,current->pid,current->real_parent->comm,current->real_parent->pid);
 
+	//zrl add for backlight probability resume dark begin,140430
+	if (led->id == QPNP_ID_GPIO) {
+		mdelay(12);
+	}
+	//zrl add for backlight probability resume dark end,140430
+	
 	led->cdev.brightness = value;
 	schedule_work(&led->work);
 }
@@ -1411,6 +1645,12 @@ static void __qpnp_led_work(struct qpnp_led_data *led,
 			dev_err(&led->spmi_dev->dev,
 				"KPDBL set brightness failed (%d)\n", rc);
 		break;
+	case QPNP_ID_GPIO:  // add by shicuiping for gpio control led
+		rc = qpnp_gpio_set(led);
+		if (rc < 0)
+			dev_err(&led->spmi_dev->dev,
+				"GPIO set brightness failed (%d)\n", rc);
+		break;
 	default:
 		dev_err(&led->spmi_dev->dev, "Invalid LED(%d)\n", led->id);
 		break;
@@ -1451,6 +1691,7 @@ static int __devinit qpnp_led_set_max_brightness(struct qpnp_led_data *led)
 			led->cdev.max_brightness = MPP_MAX_LEVEL;
 		break;
 	case QPNP_ID_KPDBL:
+	case QPNP_ID_GPIO:  // add by shicuiping for gpio control led
 		led->cdev.max_brightness = KPDBL_MAX_LEVEL;
 		break;
 	default:
@@ -1495,7 +1736,7 @@ static int __devinit qpnp_wled_init(struct qpnp_led_data *led)
 	num_wled_strings = led->wled_cfg->num_strings;
 
 	/* verify ranges */
-	if (led->wled_cfg->ovp_val > WLED_OVP_27V) {
+	if (led->wled_cfg->ovp_val > WLED_OVP_37V) {
 		dev_err(&led->spmi_dev->dev, "Invalid ovp value\n");
 		return -EINVAL;
 	}
@@ -2128,16 +2369,17 @@ static void led_blink(struct qpnp_led_data *led,
 			struct pwm_config_data *pwm_cfg)
 {
 	if (pwm_cfg->use_blink) {
-		if (led->cdev.brightness) {
+		if ( led->id == QPNP_ID_LED_MPP && led->mpp_cfg->pwm_mode == PWM_MODE ) {// change by shicuiping for blink start
 			pwm_cfg->blinking = true;
-			if (led->id == QPNP_ID_LED_MPP)
-				led->mpp_cfg->pwm_mode = LPG_MODE;
-			pwm_cfg->mode = LPG_MODE;
+			led->mpp_cfg->pwm_cfg->pwm_period_us =1000*(led->cdev.blink_delay_on+led->cdev.blink_delay_off);
+			// change by shicuiping for blink stop
 		} else {
 			pwm_cfg->blinking = false;
 			pwm_cfg->mode = pwm_cfg->default_mode;
-			if (led->id == QPNP_ID_LED_MPP)
-				led->mpp_cfg->pwm_mode = pwm_cfg->default_mode;
+			// remove by shicuiping for blink start
+			/*if (led->id == QPNP_ID_LED_MPP)
+				led->mpp_cfg->pwm_mode = pwm_cfg->default_mode;*/
+			// remove by shicuiping for blink stop
 		}
 		pwm_free(pwm_cfg->pwm_dev);
 		qpnp_pwm_init(pwm_cfg, led->spmi_dev, led->cdev.name);
@@ -2158,7 +2400,13 @@ static ssize_t blink_store(struct device *dev,
 	if (ret)
 		return ret;
 	led = container_of(led_cdev, struct qpnp_led_data, cdev);
-	led->cdev.brightness = blinking ? led->cdev.max_brightness : 0;
+	// change by shicuiping for blink start
+	//dev_warn(&led->spmi_dev->dev, "%s, blinking:0x%lx\n",__func__,blinking);
+	led->cdev.blink_delay_on = blinking &0xFFFF;
+	led->cdev.blink_delay_off = (blinking &0xFFFF0000)>>16;
+	led->cdev.brightness = blinking ? (led->cdev.max_brightness)* \
+		(led->cdev.blink_delay_on)/(led->cdev.blink_delay_on+led->cdev.blink_delay_off) : 0;
+	// change by shicuiping for blink stop
 
 	switch (led->id) {
 	case QPNP_ID_LED_MPP:
@@ -2518,6 +2766,8 @@ static int __devinit qpnp_led_initialize(struct qpnp_led_data *led)
 			dev_err(&led->spmi_dev->dev,
 				"KPDBL initialize failed(%d)\n", rc);
 		break;
+	case QPNP_ID_GPIO: // add by shicuiping for gpio control led
+		break;
 	default:
 		dev_err(&led->spmi_dev->dev, "Invalid LED(%d)\n", led->id);
 		return -EINVAL;
@@ -2732,7 +2982,7 @@ static int __devinit qpnp_get_config_flash(struct qpnp_led_data *led,
 			led->flash_cfg->enable_module = FLASH_ENABLE_MODULE;
 		} else
 			led->flash_cfg->enable_module = FLASH_ENABLE_ALL;
-		led->flash_cfg->trigger_flash = FLASH_TORCH_OUTPUT;
+		led->flash_cfg->trigger_flash = FLASH_STROBE_SW;
 	}
 
 	rc = of_property_read_u32(node, "qcom,current", &val);
@@ -2824,7 +3074,7 @@ static int __devinit qpnp_get_config_pwm(struct pwm_config_data *pwm_cfg,
 	pwm_cfg->use_blink =
 		of_property_read_bool(node, "qcom,use-blink");
 
-	if (pwm_cfg->mode == LPG_MODE || pwm_cfg->use_blink) {
+	if (pwm_cfg->mode == LPG_MODE /*|| pwm_cfg->use_blink*/) { // change by shicuiping for blink
 		pwm_cfg->duty_cycles =
 			devm_kzalloc(&spmi_dev->dev,
 			sizeof(struct pwm_duty_cycles), GFP_KERNEL);
@@ -3146,6 +3396,57 @@ static int __devinit qpnp_get_config_mpp(struct qpnp_led_data *led,
 	return 0;
 }
 
+// add by shicuiping for gpio control led start
+static int __devinit qpnp_get_config_gpio(struct qpnp_led_data *led,
+		struct device_node *node)
+{
+	//unsigned long flags; // Added by Xiaodong.Chen at 2013.12.12 for enable ic
+	int rc;
+	u32 val;	
+
+	led->gpio_cfg = devm_kzalloc(&led->spmi_dev->dev,
+			sizeof(struct gpio_config_data), GFP_KERNEL);
+	if (!led->gpio_cfg) {
+		dev_err(&led->spmi_dev->dev, "Unable to allocate memory\n");
+		return -ENOMEM;
+	}
+
+	rc = of_property_read_u32(node, "qcom,gpio_num", &val);
+	if (!rc) {
+		led->gpio_cfg->gpio_num= (u8) val;
+	} else if (rc != -EINVAL)
+		return rc;
+
+	rc = gpio_request(led->gpio_cfg->gpio_num, "gpio-leds");
+	if (rc) {
+		dev_err(&led->spmi_dev->dev, "%s,%d, gpio request %d fail\n", __func__, __LINE__, led->gpio_cfg->gpio_num);
+		return -ENOMEM;
+	}
+	gpio_tlmm_config(GPIO_CFG(led->gpio_cfg->gpio_num, 0, GPIO_CFG_OUTPUT, GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
+	//add by yusen.ke.sz@tcl.com at 20140420 for display backlight brightness begin
+	init_adb_proc();	
+	//add end
+	//gpio_direction_output(led->gpio_cfg->gpio_num, 0);
+
+	// Added by Xiaodong.Chen at 2013.12.12 for enable ic
+	/*local_irq_save(flags);
+	// initialize gpio level
+	gpio_direction_output(led->gpio_cfg->gpio_num, 0);
+	mdelay(3);*///del by yusen.ke at 20140224 for resolve the backlight blink between lk and kernel
+	// Deleted by Xiaodong.Chen at 2014.1.23 for delay initialize ic step
+	// ctrl backlight ic enable
+	// gpio_direction_output(led->gpio_cfg->gpio_num, 1);
+	// udelay(120); // greater than 260us
+	// gpio_direction_output(led->gpio_cfg->gpio_num, 0);
+	// udelay(300); // greater than 100us
+	// gpio_direction_output(led->gpio_cfg->gpio_num, 1);
+	// Deleted end
+	//local_irq_restore(flags);//del by yusen.ke at 20140224 for resolve the backlight blink between lk and kernel
+	// Added end
+	return 0;
+}
+// add by shicuiping for gpio control led stop
+
 static int __devinit qpnp_leds_probe(struct spmi_device *spmi)
 {
 	struct qpnp_led_data *led, *led_array;
@@ -3266,6 +3567,13 @@ static int __devinit qpnp_leds_probe(struct spmi_device *spmi)
 					"Unable to read kpdbl config data\n");
 				goto fail_id_check;
 			}
+		} else if (strncmp(led_label, "gpio", sizeof("gpio")) == 0) {  // add by shicuiping for gpio control led start
+			rc = qpnp_get_config_gpio(led, temp);
+			if (rc < 0) {
+				dev_err(&led->spmi_dev->dev,
+					"Unable to read gpio config data\n");
+				goto fail_id_check;
+			}  // add by shicuiping for gpio control led stop
 		} else {
 			dev_err(&led->spmi_dev->dev, "No LED matching label\n");
 			rc = -EINVAL;
@@ -3313,11 +3621,12 @@ static int __devinit qpnp_leds_probe(struct spmi_device *spmi)
 					&blink_attr_group);
 				if (rc)
 					goto fail_id_check;
-
-				rc = sysfs_create_group(&led->cdev.dev->kobj,
+				// remove by shicuiping for blink  start
+				/*rc = sysfs_create_group(&led->cdev.dev->kobj,
 					&lpg_attr_group);
 				if (rc)
-					goto fail_id_check;
+					goto fail_id_check;*/
+				// remove by shicuiping for blink stop
 			} else if (led->mpp_cfg->pwm_cfg->mode == LPG_MODE) {
 				rc = sysfs_create_group(&led->cdev.dev->kobj,
 					&lpg_attr_group);
@@ -3352,8 +3661,8 @@ static int __devinit qpnp_leds_probe(struct spmi_device *spmi)
 		}
 
 		/* configure default state */
-		if (led->default_on) {
-			led->cdev.brightness = led->cdev.max_brightness;
+		if (led->default_on && !alarm_boot_mode) {	// modify by xcb for power off alarm bug id 585101
+			led->cdev.brightness = 135;//adjust default level to 15, ignore "led->cdev.max_brightness";
 			__qpnp_led_work(led, led->cdev.brightness);
 			if (led->turn_off_delay_ms > 0)
 				qpnp_led_turn_off(led);
@@ -3385,6 +3694,7 @@ static int __devexit qpnp_leds_remove(struct spmi_device *spmi)
 		led_classdev_unregister(&led_array[i].cdev);
 		switch (led_array[i].id) {
 		case QPNP_ID_WLED:
+		case QPNP_ID_GPIO:  // add by shicuiping for gpio control led
 			break;
 		case QPNP_ID_FLASH1_LED0:
 		case QPNP_ID_FLASH1_LED1:
@@ -3439,15 +3749,10 @@ static int __devexit qpnp_leds_remove(struct spmi_device *spmi)
 
 	return 0;
 }
-
-#ifdef CONFIG_OF
 static struct of_device_id spmi_match_table[] = {
-	{ .compatible = "qcom,leds-qpnp",},
-	{ },
+	{	.compatible = "qcom,leds-qpnp",
+	}
 };
-#else
-#define spmi_match_table NULL
-#endif
 
 static struct spmi_driver qpnp_leds_driver = {
 	.driver		= {
