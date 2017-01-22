@@ -892,3 +892,18 @@ static int __init kernel_init(void * unused)
 	init_post();
 	return 0;
 }
+
+// add by xcb for power off alarm bug 585101 begin 
+bool alarm_boot_mode = false;
+static int __init alarm_boot_check(char *p)
+{
+	if(!strcmp(p, "alarm"))
+		alarm_boot_mode = true;
+	else
+		alarm_boot_mode = false;
+
+	printk("%s alarm_boot_mode = %d\n", __func__, alarm_boot_mode);
+	return 0;
+}
+// add by xcb end
+early_param("androidboot.mode", alarm_boot_check);
