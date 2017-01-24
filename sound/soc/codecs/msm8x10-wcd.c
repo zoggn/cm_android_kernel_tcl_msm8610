@@ -856,6 +856,44 @@ static int msm8x10_wcd_codec_enable_charge_pump(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
+static void msm8x10_enable_ear_hac_power_amp(u32 on)
+{
+    int ret = 0;
+    
+    printk("msm8x10_enable_ear_hac_power_amp ear_hac_gpio = %d, on = %d\n", ear_hac_gpio, on);
+	if (ear_hac_gpio < 0)
+        return;
+    
+	if (on) {
+		ret = gpio_direction_output(ear_hac_gpio, on);
+	} else {
+		ret = gpio_direction_output(ear_hac_gpio, on);
+	}
+
+    printk("msm8x10_enable_ear_hac_power_amp ret = %d\n", ret);
+
+	printk("%s: %s external ear PAs.\n", __func__,
+			on ? "Enable" : "Disable");
+}
+
+static int msm8x10_wcd_ear_hac_gain_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+    return 0;
+}
+
+static int msm8x10_wcd_ear_hac_gain_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+    printk("msm8x10_wcd_ear_hac_gain_put %d\n", (int)ucontrol->value.integer.value[0]);
+    if (ucontrol->value.integer.value[0])
+	    msm8x10_enable_ear_hac_power_amp(1);
+	else
+	    msm8x10_enable_ear_hac_power_amp(0);
+	    
+    return 0;
+}
+
 static int msm8x10_wcd_pa_gain_get(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {

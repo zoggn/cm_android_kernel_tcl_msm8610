@@ -234,6 +234,7 @@
 		"AMIC1", "MIC BIAS Internal1",
 		"AMIC2", "MIC BIAS Internal2";
 	qcom,mbhc-bias-internal;
+	qcom,ext-spk-amp-gpio = <&msmgpio 92 0x0>;
     };
 };
 
@@ -277,6 +278,7 @@
 
 		qcom,cdc-on-demand-supplies = "cdc-vdda-cp",
 						"cdc-vdd-mic-bias";
+        qcom,ear-hac-gpio = <&msmgpio 77 0x0>;
 	};
 
 	msm8x10_wcd_codec@77{
