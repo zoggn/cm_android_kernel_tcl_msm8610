@@ -224,6 +224,33 @@ static void *adsp_state_notifier;
 static struct snd_soc_codec *registered_codec;
 #define ADSP_STATE_READY_TIMEOUT_MS 2000
 
+static int ear_hac_gpio = -1;
+static int ear_power_hac_init = 0;
+
+static int msm8x10_ear_power_hac_init(struct device *dev)
+{
+    int ret = 0;
+
+    if (ear_power_hac_init)
+        return 0;
+    
+    ear_hac_gpio = of_get_named_gpio(dev->of_node,
+        "qcom,ear-hac-gpio", 0);
+    printk("msm8x10_ear_power_hac_init gpio = %d\n", ear_hac_gpio);
+    if (ear_hac_gpio >= 0) {
+        ret = gpio_request(ear_hac_gpio, "ear_hac_gpio");
+        if (ret) {
+            pr_err("%s: gpio_request failed for ear_hac_gpio.\n",
+                __func__);
+            return -EINVAL;
+        }
+        gpio_direction_output(ear_hac_gpio, 0);
+    }
+
+    ear_power_hac_init = 1;
+    
+    return 0;
+}
 
 static int get_i2c_msm8x10_wcd_device_info(u16 reg,
 					   struct msm8x10_wcd_i2c **msm8x10_wcd)
@@ -1167,6 +1194,9 @@ static const struct snd_kcontrol_new msm8x10_wcd_snd_controls[] = {
 
 	SOC_ENUM_EXT("EAR PA Gain", msm8x10_wcd_ear_pa_gain_enum[0],
 		msm8x10_wcd_pa_gain_get, msm8x10_wcd_pa_gain_put),
+
+ 	SOC_SINGLE_BOOL_EXT("EAR HAC Switch", 0,
+		msm8x10_wcd_ear_hac_gain_get, msm8x10_wcd_ear_hac_gain_put),
 
 	SOC_SINGLE_TLV("LINEOUT Volume", MSM8X10_WCD_A_RX_LINE_1_GAIN,
 		       0, 12, 1, line_gain),
@@ -3619,6 +3649,8 @@ static int __devinit msm8x10_wcd_i2c_probe(struct i2c_client *client,
 		ret = -EINVAL;
 		goto rtn;
 	}
+
+ msm8x10_ear_power_hac_init(&client->dev);
 
 	q6_state = apr_get_q6_state();
 	if ((q6_state == APR_SUBSYS_DOWN) &&
