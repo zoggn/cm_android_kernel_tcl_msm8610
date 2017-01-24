@@ -249,3 +249,16 @@ config MSM_GEMINI
 	depends on MSMB_CAMERA && (ARCH_MSM7X30 || ARCH_MSM8X60 || ARCH_MSM8960)
 	---help---
 	  Enables support for the Gemini JPEG encoder engine for 8x60.
+
+config OV5648_MIATALITE
+	bool "vti 5MP Bayer Sensor."
+	default n
+	---help---
+		ovti 5MP Bayer Sensor.
+
+config OV8858
+	bool "OmniVision OV8858 (BAYER 8MP)"
+	depends on MSMB_CAMERA
+    default n
+	---help---
+		OmniVision 8 MP Bayer Sensor.

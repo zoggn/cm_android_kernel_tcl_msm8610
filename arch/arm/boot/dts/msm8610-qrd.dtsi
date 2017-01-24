@@ -189,18 +189,6 @@
 	qcom,wdt@f9017000 {
 		qcom,bark-time = <13000>;
 	};
-	
-
-	color_led {
-		compatible = "qcom,leds-gpio-color-led";
-		status = "okay";
-		qcom,red-led = <&msmgpio 59 0>;
-		qcom,green-led = <&msmgpio 60 0>;
-		qcom,blink-on-time = <500>;
-		qcom,blink-off-time = <1500>;
-		linux,name = "color_leds";
-		linux,default-trigger = "color_leds-trigger";
-	};
 
 	gpio_keys {
                 compatible = "gpio-keys";

@@ -20,8 +20,9 @@
 #define GC0339_SENSOR_NAME "gc0339"
 DEFINE_MSM_MUTEX(gc0339_mut);
 
+//#define GC0339_DEBUG
 #undef CDBG
-#ifdef CONFIG_MSMB_CAMERA_DEBUG
+#ifdef GC0339_DEBUG
 #define CDBG(fmt, args...) pr_err(fmt, ##args)
 #else
 #define CDBG(fmt, args...) do { } while (0)
@@ -31,7 +32,6 @@ DEFINE_MSM_MUTEX(gc0339_mut);
 static struct msm_sensor_ctrl_t gc0339_s_ctrl;
 
 static struct msm_sensor_power_setting gc0339_power_setting[] = {
-
 	{
 		.seq_type = SENSOR_GPIO,
 		.seq_val = SENSOR_GPIO_RESET,
@@ -56,12 +56,12 @@ static struct msm_sensor_power_setting gc0339_power_setting[] = {
 		.config_val = 0,
 		.delay = 0,
 	},
-	{
-		.seq_type = SENSOR_VREG,
-		.seq_val = CAM_VANA,
-		.config_val = 0,
-		.delay = 0,
-	},
+    {
+        .seq_type = SENSOR_GPIO,
+        .seq_val = SENSOR_GPIO_VANA,
+        .config_val = GPIO_OUT_HIGH,
+        .delay = 0,
+    },
 	{
 		.seq_type = SENSOR_CLK,
 		.seq_val = SENSOR_CAM_MCLK,
@@ -84,7 +84,7 @@ static struct msm_sensor_power_setting gc0339_power_setting[] = {
 
 static struct v4l2_subdev_info gc0339_subdev_info[] = {
 	{
-		.code   = V4L2_MBUS_FMT_SBGGR10_1X10,
+		.code   = V4L2_MBUS_FMT_SRGGB8_1X8,
 		.colorspace = V4L2_COLORSPACE_JPEG,
 		.fmt    = 1,
 		.order    = 0,
@@ -378,6 +378,9 @@ int32_t gc0339_match_id(struct msm_sensor_ctrl_t *s_ctrl)
 		return rc;
 	}
 
+	printk(KERN_DEBUG "%s, expect id 0x%x, read id:0x%x\n", __func__, 
+		s_ctrl->sensordata->slave_info->sensor_id, 
+		chipid);
 	if (chipid != s_ctrl->sensordata->slave_info->sensor_id) {
 		pr_err("msm_sensor_match_id chip id doesnot match\n");
 		return -ENODEV;
