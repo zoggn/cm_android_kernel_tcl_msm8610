@@ -194,8 +194,15 @@
                 compatible = "gpio-keys";
                 input-name = "gpio-keys";
 
-//modify by ZTEBSP liwen for wolume down key 20130705 start
-/*
+                hall_int {
+                       label = "HALL_INT";
+                       gpios = <&msmgpio 87 0x1>;
+                       linux,input-type = <1>;
+                       linux,code = <251>;
+                       gpio-key,wakeup;
+                       debounce-interval = <15>;
+               };
+
                 camera_snapshot {
                         label = "camera_snapshot";
                         gpios = <&msmgpio 73 0x1>;
