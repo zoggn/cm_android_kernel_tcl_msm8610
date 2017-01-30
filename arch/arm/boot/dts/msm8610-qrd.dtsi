@@ -220,7 +220,6 @@
                         gpio-key,wakeup;
                         debounce-interval = <15>;
                 };
-*/
 
                 vol_up {
                         label = "volume_up";
