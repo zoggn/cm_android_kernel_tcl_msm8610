@@ -41,7 +41,7 @@
 			focaltech,irq-gpio = <&msmgpio 1 0x00>;
 			focaltech,display-coords = <0 0 540 960>;
 			focaltech,panel-coords = <0 0 540 960>;
-			focaltech,button-map= <158 172 139>;
+			focaltech,button-map= <158 102 139>;
 			focaltech,no-force-update;
 			focaltech,i2c-pull-up;
 			focaltech,group-id = <1>;
@@ -61,7 +61,7 @@
 			focaltech,disp-maxy = <960>;
 			focaltech,pan-maxx = <541>;
 			focaltech,pan-maxy = <1060>;
-			focaltech,key-codes = <158 172 139>;
+			focaltech,key-codes = <158 102 139>;
 			focaltech,y-offset = <0>;
 		};
 		goodix@14{
@@ -78,7 +78,7 @@
 			goodix,interrupt-gpios = <&msmgpio 1 0x00>;	
 			goodix,panel-coords = <0 0 540 960>;
 			goodix,display-coords = <0 0 540 960>;
-			goodix,button-map= <158 172 139>;
+			goodix,button-map= <158 102 139>;
 			goodix,no-force-update;
 			goodix,i2c-pull-up;
 			goodix,family-id = <0x0>;	
@@ -109,7 +109,7 @@
 			goodix,disp-maxy = <960>;
 			goodix,pan-maxx = <541>;
 			goodix,pan-maxy = <1060>;
-			goodix,key-codes = <158 172 139>;
+			goodix,key-codes = <158 102 139>;
 			goodix,y-offset = <0>;
 		};
 	};
@@ -121,7 +121,7 @@
 		qcom,disp-maxy = <800>;
 		qcom,panel-maxx = <481>;
 		qcom,panel-maxy = <940>;
-		qcom,key-codes = <139 0 172 158 0 0 0>;
+		qcom,key-codes = <139 0 102 158 0 0 0>;
 		qcom,y-offset = <0>;
 	};
 	*/
