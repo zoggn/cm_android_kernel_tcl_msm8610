@@ -883,11 +883,11 @@
 		compatible = "qcom,msm-thermal";
 		qcom,sensor-id = <5>;
 		qcom,poll-ms = <250>;
-		qcom,limit-temp = <60>;
-		qcom,temp-hysteresis = <10>;
-		qcom,freq-step = <2>;
+		qcom,limit-temp = <65>; // [PLATFORM]-Change by N.Kurkov, change low cpu freq , 2017/02/02 
+		qcom,temp-hysteresis = <6>; // [PLATFORM]-Change by N.Kurkov, change low cpu freq , 2017/02/02
+		qcom,freq-step = <1>; // [PLATFORM]-Change by N.Kurkov, change low cpu freq , 2017/02/02
 		qcom,freq-control-mask = <0xf>;
-		qcom,core-limit-temp = <80>;
+		qcom,core-limit-temp = <75>; // [PLATFORM]-Change by N.Kurkov, change low cpu freq , 2017/02/02
 		qcom,core-temp-hysteresis = <10>;
 		qcom,core-control-mask = <0xe>;
 		qcom,hotplug-temp = <110>;
