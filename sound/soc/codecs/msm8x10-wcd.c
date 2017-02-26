@@ -50,7 +50,8 @@
 #define BITS_PER_REG		8
 #define MSM8X10_WCD_TX_PORT_NUMBER	4
 
-#define DAPM_MICBIAS_EXTERNAL_STANDALONE "MIC BIAS External Standalone" // add by changshun.zhou modify for playing music noise by headset 20140110
+#define DAPM_MICBIAS_EXTERNAL_STANDALONE "MIC BIAS External Standalone"
+
 #define MSM8X10_WCD_I2S_MASTER_MODE_MASK	0x08
 #define MSM8X10_DINO_CODEC_BASE_ADDR		0xFE043000
 #define MSM8X10_DINO_CODEC_REG_SIZE		0x200
@@ -73,6 +74,8 @@
 
 /* RX_HPH_CNP_WG_TIME increases by 0.24ms */
 #define MSM8X10_WCD_WG_TIME_FACTOR_US  240
+
+#define USE_SPK_RECEIVER_SWITCH_EXT_GPIO 93
 
 enum {
 	MSM8X10_WCD_I2C_TOP_LEVEL = 0,
@@ -185,6 +188,7 @@ struct msm8x10_wcd_priv {
 	 * end of impedance measurement
 	 */
 	struct list_head reg_save_restore;
+	u32 micb_en_count;
 };
 
 static unsigned short rx_digital_gain_reg[] = {
@@ -219,35 +223,6 @@ static void *adsp_state_notifier;
 
 static struct snd_soc_codec *registered_codec;
 #define ADSP_STATE_READY_TIMEOUT_MS 2000
-
-static bool is_session_capture; // add by changshun.zhou modify for playing music noise by headset 20140110
-static int ear_hac_gpio = -1;
-static int ear_power_hac_init = 0;
-
-static int msm8x10_ear_power_hac_init(struct device *dev)
-{
-    int ret = 0;
-
-    if (ear_power_hac_init)
-        return 0;
-    
-    ear_hac_gpio = of_get_named_gpio(dev->of_node,
-        "qcom,ear-hac-gpio", 0);
-    printk("msm8x10_ear_power_hac_init gpio = %d\n", ear_hac_gpio);
-    if (ear_hac_gpio >= 0) {
-        ret = gpio_request(ear_hac_gpio, "ear_hac_gpio");
-        if (ret) {
-            pr_err("%s: gpio_request failed for ear_hac_gpio.\n",
-                __func__);
-            return -EINVAL;
-        }
-        gpio_direction_output(ear_hac_gpio, 0);
-    }
-
-    ear_power_hac_init = 1;
-    
-    return 0;
-}
 
 
 static int get_i2c_msm8x10_wcd_device_info(u16 reg,
@@ -424,32 +399,6 @@ static int __msm8x10_wcd_reg_read(struct msm8x10_wcd *msm8x10_wcd,
 
 	return temp;
 }
-
-static int __msm8x10_wcd_bulk_write(struct msm8x10_wcd *msm8x10_wcd,
-		unsigned short reg, int count, u8 *buf)
-{
-	int ret = -EINVAL;
-	mutex_lock(&msm8x10_wcd->io_lock);
-	if (MSM8X10_WCD_IS_HELICON_REG(reg))
-		ret = msm8x10_wcd_i2c_write(reg, count, buf);
-	else if (MSM8X10_WCD_IS_DINO_REG(reg))
-		ret = msm8x10_wcd_abh_write_device(msm8x10_wcd, reg,
-						buf, count);
-	if (ret < 0)
-		dev_err(msm8x10_wcd->dev,
-				"%s: codec bulk write failed\n", __func__);
-	mutex_unlock(&msm8x10_wcd->io_lock);
-	return ret;
-}
-
-int msm8x10_wcd_bulk_write(struct wcd9xxx_core_resource *core_res,
-			unsigned short reg, int count, u8 *buf)
-{
-	struct msm8x10_wcd *msm8x10_wcd =
-				(struct msm8x10_wcd *) core_res->parent;
-	return __msm8x10_wcd_bulk_write(msm8x10_wcd, reg, count, buf);
-}
-EXPORT_SYMBOL(msm8x10_wcd_bulk_write);
 
 int msm8x10_wcd_reg_read(struct wcd9xxx_core_resource *core_res,
 				unsigned short reg)
@@ -907,46 +856,6 @@ static int msm8x10_wcd_codec_enable_charge_pump(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
-// 
-static void msm8x10_enable_ear_hac_power_amp(u32 on)
-{
-    int ret = 0;
-    
-    printk("msm8x10_enable_ear_hac_power_amp ear_hac_gpio = %d, on = %d\n", ear_hac_gpio, on);
-	if (ear_hac_gpio < 0)
-        return;
-    
-	if (on) {
-		ret = gpio_direction_output(ear_hac_gpio, on);
-	} else {
-		ret = gpio_direction_output(ear_hac_gpio, on);
-	}
-
-    printk("msm8x10_enable_ear_hac_power_amp ret = %d\n", ret);
-
-	printk("%s: %s external ear PAs.\n", __func__,
-			on ? "Enable" : "Disable");
-}
-
-static int msm8x10_wcd_ear_hac_gain_get(struct snd_kcontrol *kcontrol,
-				struct snd_ctl_elem_value *ucontrol)
-{
-    return 0;
-}
-
-static int msm8x10_wcd_ear_hac_gain_put(struct snd_kcontrol *kcontrol,
-				struct snd_ctl_elem_value *ucontrol)
-{
-    printk("msm8x10_wcd_ear_hac_gain_put %d\n", (int)ucontrol->value.integer.value[0]);
-    if (ucontrol->value.integer.value[0])
-	    msm8x10_enable_ear_hac_power_amp(1);
-	else
-	    msm8x10_enable_ear_hac_power_amp(0);
-	    
-    return 0;
-}
-//
-
 static int msm8x10_wcd_pa_gain_get(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
@@ -1220,9 +1129,6 @@ static const struct snd_kcontrol_new msm8x10_wcd_snd_controls[] = {
 
 	SOC_ENUM_EXT("EAR PA Gain", msm8x10_wcd_ear_pa_gain_enum[0],
 		msm8x10_wcd_pa_gain_get, msm8x10_wcd_pa_gain_put),
-		
- 	SOC_SINGLE_BOOL_EXT("EAR HAC Switch", 0,
-		msm8x10_wcd_ear_hac_gain_get, msm8x10_wcd_ear_hac_gain_put),
 
 	SOC_SINGLE_TLV("LINEOUT Volume", MSM8X10_WCD_A_RX_LINE_1_GAIN,
 		       0, 12, 1, line_gain),
@@ -1248,6 +1154,13 @@ static const struct snd_kcontrol_new msm8x10_wcd_snd_controls[] = {
 	SOC_SINGLE_S8_TLV("DEC2 Volume",
 			  MSM8X10_WCD_A_CDC_TX2_VOL_CTL_GAIN,
 			  -84, 40, digital_gain),
+
+	SOC_SINGLE_TLV("ADC1 Volume", MSM8X10_WCD_A_TX_1_EN, 2,
+					19, 0, analog_gain),
+	SOC_SINGLE_TLV("ADC2 Volume", MSM8X10_WCD_A_TX_2_EN, 2,
+					19, 0, analog_gain),
+	SOC_SINGLE_TLV("ADC3 Volume", MSM8X10_WCD_A_TX_3_EN, 2,
+					19, 0, analog_gain),
 
 	SOC_SINGLE_S8_TLV("IIR1 INP1 Volume",
 			  MSM8X10_WCD_A_CDC_IIR1_GAIN_B1_CTL,
@@ -1370,6 +1283,10 @@ static const char * const rx_rdac4_text[] = {
 	"ZERO", "RX3", "RX2"
 };
 
+static const char * const rx_rdac3_text[] = {
+	"RX1", "RX2"
+};
+
 static const struct soc_enum rx_mix1_inp1_chain_enum =
 	SOC_ENUM_SINGLE(MSM8X10_WCD_A_CDC_CONN_RX1_B1_CTL, 0, 6, rx_mix1_text);
 
@@ -1411,6 +1328,10 @@ static const struct soc_enum rx_rdac4_enum  =
 	SOC_ENUM_SINGLE(MSM8X10_WCD_A_CDC_CONN_LO_DAC_CTL, 0, 3,
 	rx_rdac4_text);
 
+static const struct soc_enum rx_rdac3_enum  =
+	SOC_ENUM_SINGLE(MSM8X10_WCD_A_CDC_CONN_HPHR_DAC_CTL, 0, 2,
+	rx_rdac3_text);
+
 static const struct soc_enum adc2_enum =
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(adc2_mux_text), adc2_mux_text);
 
@@ -1443,6 +1364,9 @@ static const struct snd_kcontrol_new rx2_mix2_inp1_mux =
 
 static const struct snd_kcontrol_new rx_dac4_mux =
 	SOC_DAPM_ENUM("RDAC4 MUX Mux", rx_rdac4_enum);
+
+static const struct snd_kcontrol_new rx_dac3_mux =
+	SOC_DAPM_ENUM("RDAC3 MUX Mux", rx_rdac3_enum);
 
 static const struct snd_kcontrol_new tx_adc2_mux =
 	SOC_DAPM_ENUM("ADC2 MUX Mux", adc2_enum);
@@ -1495,7 +1419,10 @@ static int msm8x10_wcd_put_dec_enum(struct snd_kcontrol *kcontrol,
 	switch (decimator) {
 	case 1:
 	case 2:
-			adc_dmic_sel = 0x0;
+			if ((dec_mux == 3) || (dec_mux == 4))
+				adc_dmic_sel = 0x1;
+			else
+				adc_dmic_sel = 0x0;
 		break;
 	default:
 		dev_err(codec->dev, "%s: Invalid Decimator = %u\n",
@@ -1723,7 +1650,7 @@ static int msm8x10_wcd_codec_enable_micbias(struct snd_soc_dapm_widget *w,
 		wcd9xxx_resmgr_notifier_call(&msm8x10_wcd->resmgr, e_pre_on);
 
 		if (strnstr(w->name, internal1_text, 30))
-			;//snd_soc_update_bits(codec, micb_int_reg, 0x80, 0x80);
+			snd_soc_update_bits(codec, micb_int_reg, 0x80, 0x80);
 		else if (strnstr(w->name, internal2_text, 30))
 			snd_soc_update_bits(codec, micb_int_reg, 0x10, 0x10);
 		else if (strnstr(w->name, internal3_text, 30))
@@ -1732,7 +1659,15 @@ static int msm8x10_wcd_codec_enable_micbias(struct snd_soc_dapm_widget *w,
 		/* Always pull up TxFe for TX2 to Micbias */
 		snd_soc_update_bits(codec, micb_int_reg, 0x04, 0x04);
 		snd_soc_update_bits(codec, MSM8X10_WCD_A_MICB_1_CTL,
-			                       0x80, 0x80); // add by changshun.zhou modify for playing music noise by headset 20140110
+					0x80, 0x80);
+//wegiuohua modify temp  for ecm mic 20131227
+#ifndef USES_MEMS_MIC_IN_PROJECT
+		snd_soc_update_bits(codec, micb_int_reg, 0x20, 0x20);
+#endif
+//weiguohua modify  temp for ecm mic 20131227
+		msm8x10_wcd->micb_en_count++;
+		pr_debug("%s micb_en_count : %d", __func__,
+				msm8x10_wcd->micb_en_count);
 		break;
 	case SND_SOC_DAPM_POST_PMU:
 		usleep_range(20000, 20100);
@@ -1740,13 +1675,17 @@ static int msm8x10_wcd_codec_enable_micbias(struct snd_soc_dapm_widget *w,
 		wcd9xxx_resmgr_notifier_call(&msm8x10_wcd->resmgr, e_post_on);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
+		if (msm8x10_wcd->micb_en_count > 0)
+			msm8x10_wcd->micb_en_count--;
+		pr_debug("%s micb_en_count : %d", __func__,
+				msm8x10_wcd->micb_en_count);
 		snd_soc_update_bits(codec, MSM8X10_WCD_A_MICB_1_CTL,
-			0x80, 0x00); // add by changshun.zhou modify for playing music noise by headset 20140110
+					0x80, 0x00);
 		/* Let MBHC module know so micbias switch to be off */
 		wcd9xxx_resmgr_notifier_call(&msm8x10_wcd->resmgr, e_post_off);
 
 		if (strnstr(w->name, internal1_text, 30))
-			;//snd_soc_update_bits(codec, micb_int_reg, 0x80, 0x00);
+			snd_soc_update_bits(codec, micb_int_reg, 0x80, 0x00);
 		else if (strnstr(w->name, internal2_text, 30))
 			snd_soc_update_bits(codec, micb_int_reg, 0x10, 0x00);
 		else if (strnstr(w->name, internal3_text, 30))
@@ -1754,6 +1693,9 @@ static int msm8x10_wcd_codec_enable_micbias(struct snd_soc_dapm_widget *w,
 
 		/* Disable pull up TxFe for TX2 to Micbias */
 		snd_soc_update_bits(codec, micb_int_reg, 0x04, 0x00);
+#ifndef USES_MEMS_MIC_IN_PROJECT
+		snd_soc_update_bits(codec, micb_int_reg, 0x20, 0x00);
+#endif
 		break;
 	}
 	return 0;
@@ -2072,7 +2014,10 @@ static const struct snd_soc_dapm_route audio_map[] = {
 
 	{"DAC1", "Switch", "RX1 CHAIN"},
 	{"HPHL DAC", "Switch", "RX1 CHAIN"},
-	{"HPHR DAC", NULL, "RX2 CHAIN"},
+	{"HPHR DAC", NULL, "RDAC3 MUX"},
+
+	{"RDAC3 MUX", "RX1", "RX1 CHAIN"},
+	{"RDAC3 MUX", "RX2", "RX2 CHAIN"},
 
 	{"LINEOUT", NULL, "LINEOUT PA"},
 	{"SPK_OUT", NULL, "SPK PA"},
@@ -2180,11 +2125,6 @@ static int msm8x10_wcd_startup(struct snd_pcm_substream *substream,
 	dev_dbg(dai->codec->dev, "%s(): substream = %s  stream = %d\n",
 		__func__,
 		substream->name, substream->stream);
-
-	// add by changshun.zhou modify for playing music noise by headset 20140110 begin
-	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE)
-		is_session_capture = true;
-	// add by changshun.zhou modify for playing music noise by headset 20140110 end
 	return 0;
 }
 
@@ -2194,11 +2134,6 @@ static void msm8x10_wcd_shutdown(struct snd_pcm_substream *substream,
 	dev_dbg(dai->codec->dev,
 		"%s(): substream = %s  stream = %d\n" , __func__,
 		substream->name, substream->stream);
-
-	// add by changshun.zhou modify for playing music noise by headset 20140110 begin
-	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE && is_session_capture)
-		is_session_capture = false;
-	// add by changshun.zhou modify for playing music noise by headset 20140110 end
 }
 
 int msm8x10_wcd_mclk_enable(struct snd_soc_codec *codec,
@@ -2388,17 +2323,26 @@ static struct snd_soc_dai_driver msm8x10_wcd_i2s_dai[] = {
 static int msm8x10_wcd_codec_enable_ear_pa(struct snd_soc_dapm_widget *w,
 	struct snd_kcontrol *kcontrol, int event)
 {
+#if USE_SPK_RECEIVER_SWITCH_EXT_GPIO
+	printk("%s: ear %s, %d. %s", __func__, (event ==SND_SOC_DAPM_POST_PMU)?"enabling":"disabling", USE_SPK_RECEIVER_SWITCH_EXT_GPIO, "\n");
+#endif
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
 		dev_dbg(w->codec->dev,
 			"%s: Sleeping 20ms after enabling EAR PA\n",
 			__func__);
+#if USE_SPK_RECEIVER_SWITCH_EXT_GPIO
+		gpio_direction_output(USE_SPK_RECEIVER_SWITCH_EXT_GPIO, 1);
+#endif
 		msleep(20);
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		dev_dbg(w->codec->dev,
 			"%s: Sleeping 20ms after disabling EAR PA\n",
 			__func__);
+#if USE_SPK_RECEIVER_SWITCH_EXT_GPIO
+		gpio_direction_output(USE_SPK_RECEIVER_SWITCH_EXT_GPIO, 0);
+#endif
 		msleep(20);
 		break;
 	}
@@ -2410,7 +2354,8 @@ static const struct snd_soc_dapm_widget msm8x10_wcd_dapm_widgets[] = {
 	SND_SOC_DAPM_OUTPUT("EAR"),
 
 	SND_SOC_DAPM_PGA_E("EAR PA", MSM8X10_WCD_A_RX_EAR_EN, 4, 0, NULL, 0,
-			msm8x10_wcd_codec_enable_ear_pa, SND_SOC_DAPM_POST_PMU),
+			msm8x10_wcd_codec_enable_ear_pa,
+			SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
 
 	SND_SOC_DAPM_MIXER("DAC1", MSM8X10_WCD_A_RX_EAR_EN, 6, 0, dac1_switch,
 		ARRAY_SIZE(dac1_switch)),
@@ -2524,6 +2469,8 @@ static const struct snd_soc_dapm_widget msm8x10_wcd_dapm_widgets[] = {
 		&rx2_mix2_inp1_mux),
 	SND_SOC_DAPM_MUX("RDAC4 MUX", SND_SOC_NOPM, 0, 0,
 		&rx_dac4_mux),
+	SND_SOC_DAPM_MUX("RDAC3 MUX", SND_SOC_NOPM, 0, 0,
+		&rx_dac3_mux),
 
 	SND_SOC_DAPM_SUPPLY("MICBIAS_REGULATOR", SND_SOC_NOPM,
 		ON_DEMAND_MICBIAS, 0,
@@ -2568,15 +2515,12 @@ static const struct snd_soc_dapm_widget msm8x10_wcd_dapm_widgets[] = {
 		MSM8X10_WCD_A_MICB_1_CTL, 7, 0,
 		msm8x10_wcd_codec_enable_micbias, SND_SOC_DAPM_PRE_PMU |
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
-
-       // add by changshun.zhou modify for playing music noise by headset 20140110 begin
 	SND_SOC_DAPM_MICBIAS_E(DAPM_MICBIAS_EXTERNAL_STANDALONE,
-	      MSM8X10_WCD_A_MICB_1_CTL,
-	      7, 0, msm8x10_wcd_codec_enable_micbias,
-	      SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
-	      SND_SOC_DAPM_POST_PMD),
-	// add by changshun.zhou modify for playing music noise by headset 20140110 end
-	
+		MSM8X10_WCD_A_MICB_1_CTL,
+		7, 0, msm8x10_wcd_codec_enable_micbias,
+		SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
+		SND_SOC_DAPM_POST_PMD),
+
 	SND_SOC_DAPM_ADC_E("ADC1", NULL, MSM8X10_WCD_A_TX_1_EN, 7, 0,
 		msm8x10_wcd_codec_enable_adc, SND_SOC_DAPM_PRE_PMU |
 		SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_POST_PMD),
@@ -2827,34 +2771,36 @@ static int msm8x10_wcd_enable_ext_mb_source(struct snd_soc_codec *codec,
 	return ret;
 }
 
-// add by changshun.zhou modify for playing music noise by headset 20140110 begin
 static int msm8x10_wcd_enable_mbhc_micbias(struct snd_soc_codec *codec,
-	bool enable)
+	 bool enable)
 {
 	int rc;
+	struct msm8x10_wcd_priv *msm8x10_wcd = snd_soc_codec_get_drvdata(codec);
+
 	if (enable)
 		rc = snd_soc_dapm_force_enable_pin(&codec->dapm,
-		DAPM_MICBIAS_EXTERNAL_STANDALONE);
+			DAPM_MICBIAS_EXTERNAL_STANDALONE);
 	else {
-		if (is_session_capture == true) {
-			pr_info("%s: TX path is going on\n", __func__);
+		if (msm8x10_wcd->micb_en_count > 0) {
+			msm8x10_wcd->micb_en_count--;
+			pr_debug("%s micb_en_count : %d", __func__,
+					msm8x10_wcd->micb_en_count);
 			return 0;
-			}
+		}
 		rc = snd_soc_dapm_disable_pin(&codec->dapm,
-		DAPM_MICBIAS_EXTERNAL_STANDALONE);
+			DAPM_MICBIAS_EXTERNAL_STANDALONE);
 	}
-	
 	snd_soc_dapm_sync(&codec->dapm);
+
 	if (rc)
 		pr_debug("%s: Failed to force %s micbias", __func__,
-		enable ? "enable" : "disable");
+			enable ? "enable" : "disable");
 	else
 		pr_debug("%s: Trying force %s micbias", __func__,
-		enable ? "enable" : "disable");
+			enable ? "enable" : "disable");
 	return rc;
 }
-// add by changshun.zhou modify for playing music noise by headset 20140110 end
-	
+
 static void msm8x10_wcd_micb_internal(struct snd_soc_codec *codec, bool on)
 {
 	snd_soc_update_bits(codec, MSM8X10_WCD_A_MICB_1_INT_RBIAS,
@@ -3335,9 +3281,11 @@ static int msm8x10_wcd_codec_probe(struct snd_soc_codec *codec)
 				on_demand_supply_name[ON_DEMAND_MICBIAS]);
 	atomic_set(&msm8x10_wcd_priv->on_demand_list[ON_DEMAND_MICBIAS].ref, 0);
 
+	msm8x10_wcd_priv->micb_en_count = 0;
+
 	ret = wcd9xxx_mbhc_init(&msm8x10_wcd_priv->mbhc,
 				&msm8x10_wcd_priv->resmgr,
-				codec, msm8x10_wcd_enable_mbhc_micbias, // add by changshun.zhou modify for playing music noise by headset 20140110
+				codec, msm8x10_wcd_enable_mbhc_micbias,
 				&mbhc_cb, &cdc_intr_ids,
 				HELICON_MCLK_CLK_9P6MHZ, true);
 	if (ret) {
@@ -3633,8 +3581,6 @@ static int __devinit msm8x10_wcd_i2c_probe(struct i2c_client *client,
 		ret = -EINVAL;
 		goto rtn;
 	}
-    
-    msm8x10_ear_power_hac_init(&client->dev);
 
 	q6_state = apr_get_q6_state();
 	if ((q6_state == APR_SUBSYS_DOWN) &&
@@ -3714,8 +3660,7 @@ static int __devinit msm8x10_wcd_i2c_probe(struct i2c_client *client,
 					MSM8X10_WCD_NUM_IRQ_REGS,
 					msm8x10_wcd_reg_read,
 					msm8x10_wcd_reg_write,
-					msm8x10_wcd_bulk_read,
-					msm8x10_wcd_bulk_write);
+					msm8x10_wcd_bulk_read);
 	if (wcd9xxx_core_irq_init(core_res)) {
 		dev_err(msm8x10->dev,
 				"%s: irq initialization failed\n", __func__);
@@ -3843,12 +3788,27 @@ static int __init msm8x10_wcd_codec_init(void)
 	if (ret != 0)
 		pr_err("%s: Failed to add msm8x10 wcd I2C driver - error %d\n",
 		       __func__, ret);
+#if USE_SPK_RECEIVER_SWITCH_EXT_GPIO
+	if (USE_SPK_RECEIVER_SWITCH_EXT_GPIO >= 0) {
+		ret = gpio_request(USE_SPK_RECEIVER_SWITCH_EXT_GPIO, "SPK_RECEIVER_SWITCH_EXT_GPIO");
+		if (ret) {
+			pr_err("%s: gpio_request failed for SPK_RECEIVER_SWITCH_EXT_GPIO.\n",
+				__func__);
+			return -EINVAL;
+		}
+		gpio_direction_output(USE_SPK_RECEIVER_SWITCH_EXT_GPIO, 0);
+	}
+#endif
 	return ret;
 }
 
 static void __exit msm8x10_wcd_codec_exit(void)
 {
 	i2c_del_driver(&msm8x10_wcd_i2c_driver);
+#if USE_SPK_RECEIVER_SWITCH_EXT_GPIO
+	if (gpio_is_valid(USE_SPK_RECEIVER_SWITCH_EXT_GPIO))
+		gpio_free(USE_SPK_RECEIVER_SWITCH_EXT_GPIO);
+#endif
 }
 
 
