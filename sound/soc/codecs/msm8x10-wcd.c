@@ -75,7 +75,7 @@
 /* RX_HPH_CNP_WG_TIME increases by 0.24ms */
 #define MSM8X10_WCD_WG_TIME_FACTOR_US  240
 
-#define USE_SPK_RECEIVER_SWITCH_EXT_GPIO 93
+#define USE_SPK_RECEIVER_SWITCH_EXT_GPIO 0
 
 enum {
 	MSM8X10_WCD_I2C_TOP_LEVEL = 0,
@@ -224,6 +224,33 @@ static void *adsp_state_notifier;
 static struct snd_soc_codec *registered_codec;
 #define ADSP_STATE_READY_TIMEOUT_MS 2000
 
+static int ear_hac_gpio = -1;
+static int ear_power_hac_init = 0;
+
+static int msm8x10_ear_power_hac_init(struct device *dev)
+{
+    int ret = 0;
+
+    if (ear_power_hac_init)
+        return 0;
+    
+    ear_hac_gpio = of_get_named_gpio(dev->of_node,
+        "qcom,ear-hac-gpio", 0);
+    printk("msm8x10_ear_power_hac_init gpio = %d\n", ear_hac_gpio);
+    if (ear_hac_gpio >= 0) {
+        ret = gpio_request(ear_hac_gpio, "ear_hac_gpio");
+        if (ret) {
+            pr_err("%s: gpio_request failed for ear_hac_gpio.\n",
+                __func__);
+            return -EINVAL;
+        }
+        gpio_direction_output(ear_hac_gpio, 0);
+    }
+
+    ear_power_hac_init = 1;
+    
+    return 0;
+}
 
 static int get_i2c_msm8x10_wcd_device_info(u16 reg,
 					   struct msm8x10_wcd_i2c **msm8x10_wcd)
@@ -856,6 +883,44 @@ static int msm8x10_wcd_codec_enable_charge_pump(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
+static void msm8x10_enable_ear_hac_power_amp(u32 on)
+{
+    int ret = 0;
+    
+    printk("msm8x10_enable_ear_hac_power_amp ear_hac_gpio = %d, on = %d\n", ear_hac_gpio, on);
+	if (ear_hac_gpio < 0)
+        return;
+    
+	if (on) {
+		ret = gpio_direction_output(ear_hac_gpio, on);
+	} else {
+		ret = gpio_direction_output(ear_hac_gpio, on);
+	}
+
+    printk("msm8x10_enable_ear_hac_power_amp ret = %d\n", ret);
+
+	printk("%s: %s external ear PAs.\n", __func__,
+			on ? "Enable" : "Disable");
+}
+
+static int msm8x10_wcd_ear_hac_gain_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+    return 0;
+}
+
+static int msm8x10_wcd_ear_hac_gain_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+    printk("msm8x10_wcd_ear_hac_gain_put %d\n", (int)ucontrol->value.integer.value[0]);
+    if (ucontrol->value.integer.value[0])
+	    msm8x10_enable_ear_hac_power_amp(1);
+	else
+	    msm8x10_enable_ear_hac_power_amp(0);
+	    
+    return 0;
+}
+
 static int msm8x10_wcd_pa_gain_get(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
@@ -1129,6 +1194,9 @@ static const struct snd_kcontrol_new msm8x10_wcd_snd_controls[] = {
 
 	SOC_ENUM_EXT("EAR PA Gain", msm8x10_wcd_ear_pa_gain_enum[0],
 		msm8x10_wcd_pa_gain_get, msm8x10_wcd_pa_gain_put),
+
+ 	SOC_SINGLE_BOOL_EXT("EAR HAC Switch", 0,
+		msm8x10_wcd_ear_hac_gain_get, msm8x10_wcd_ear_hac_gain_put),
 
 	SOC_SINGLE_TLV("LINEOUT Volume", MSM8X10_WCD_A_RX_LINE_1_GAIN,
 		       0, 12, 1, line_gain),
@@ -3581,6 +3649,8 @@ static int __devinit msm8x10_wcd_i2c_probe(struct i2c_client *client,
 		ret = -EINVAL;
 		goto rtn;
 	}
+
+	msm8x10_ear_power_hac_init(&client->dev);
 
 	q6_state = apr_get_q6_state();
 	if ((q6_state == APR_SUBSYS_DOWN) &&
