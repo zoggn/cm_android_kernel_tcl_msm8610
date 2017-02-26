@@ -105,9 +105,9 @@ void print_local_time(char *param)
 //#define STK_IRS
 //#define STK_CHK_REG
 //#define STK_GES
-#include <stk3x1x.h>
+#include <linux/stk3x1x.h>
 #ifdef SPREADTRUM_PLATFORM
-	#include "stk3x1x.h"
+	#include "linux/stk3x1x.h"
 #else
 	//#include "linux/stk3x1x.h"
 #endif
