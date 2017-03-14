@@ -1286,6 +1286,16 @@ static long msm_sensor_subdev_ioctl(struct v4l2_subdev *sd,
 		return 0;
 	case MSM_SD_SHUTDOWN:
 		return 0;
+//Begin add by N.Kurkov for camera OTP feature, 2017.03.14..
+	case VIDIOC_MSM_OTP_CFG:
+		if(s_ctrl->func_tbl->otp_config)
+			return s_ctrl->func_tbl->otp_config(s_ctrl, argp);
+		return 0;
+	case VIDIOC_MSM_OTP_CLEARBUFF_CFG:
+		if(s_ctrl->func_tbl->otp_clearbuff_config)
+			return s_ctrl->func_tbl->otp_clearbuff_config(s_ctrl, argp);
+		return 0;
+//End add by N.Kurkov for camera OTP feature, 2017.03.14.
 	default:
 		return -ENOIOCTLCMD;
 	}
