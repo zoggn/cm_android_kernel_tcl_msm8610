@@ -58,17 +58,17 @@
 			#size-cells = <1>;
 			status = "disabled";
 
-			qcom,vddmax-mv = <4200>;
-			qcom,vddsafe-mv = <4230>;
-			qcom,vinmin-mv = <4300>;
-			qcom,vbatdet-mv = <4100>;
-			qcom,ibatmax-ma = <1500>;
-			qcom,ibatterm-ma = <240>; //doumingming modify
-			qcom,ibatsafe-ma = <1500>;
-			qcom,thermal-mitigation = <1500 700 600 325>;
+			qcom,vddmax-mv = <4350>;
+			qcom,vddsafe-mv = <4400>;
+			qcom,vinmin-mv = <4200>;
+			qcom,vbatdet-mv = <4200>;
+			qcom,ibatmax-ma = <1300>;
+			qcom,ibatterm-ma = <100>; //N.Kurkov modify
+			qcom,ibatsafe-ma = <1300>;
+			qcom,thermal-mitigation = <325 1300 900 600 325>;
 			qcom,vbatdet-delta-mv = <100>;
-			qcom,resume-soc = <99>;
-			qcom,tchg-mins = <512>; //doumingming modify
+			qcom,resume-soc = <95>;
+			qcom,tchg-mins = <360>; //N.Kurkov modify
 			qcom,chg-vadc = <&pm8110_vadc>;
 			qcom,chg-adc_tm = <&pm8110_adc_tm>;
 
@@ -76,7 +76,7 @@
 			qcom,maxinput-usb-ma = <1000>;
 			qcom,warm-bat-decidegc = <400>;
 			qcom,cool-bat-decidegc = <50>;
-			qcom,ibatmax-warm-ma = <700>;
+			qcom,ibatmax-warm-ma = <600>;
 			qcom,warm-bat-mv = <4150>;
 			qcom,ibatmax-cool-ma = <600>;
 			qcom,cool-bat-mv = <4120>;
