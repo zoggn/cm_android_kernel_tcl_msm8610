@@ -156,15 +156,6 @@
 			stk,ps-thdh = <1000>;
 			stk,ps-thdl = <900>;
 			stk,use-fir;
-		};	
-		tsl2772@39 { 
-		    compatible = "taos,tsl2772";
-			reg = <0x39>;
-			interrupt-parent = <&msmgpio>;
-			interrupts = <80 0x2>;
-			vdd-supply = <&pm8110_l19>;
-			vio-supply = <&pm8110_l14>;
-			gpios = <&msmgpio 80 0x02>;
 		};
 		hscdtd007a@c { 
 		    compatible = "alps,hscdtd007a";
