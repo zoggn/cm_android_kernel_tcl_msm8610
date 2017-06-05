@@ -54,17 +54,6 @@ static struct gpiomux_setting gpio_cam_i2c_config = {
 	.pull = GPIOMUX_PULL_NONE,
 };
 
-static struct gpiomux_setting gpio_nfc_config = {
-	.func = GPIOMUX_FUNC_2,
-	.drv  = GPIOMUX_DRV_2MA,
-	.pull = GPIOMUX_PULL_NONE,
-};
-static struct gpiomux_setting gpio_nfc_sus_config = {
-	.func = GPIOMUX_FUNC_2,
-	.drv  = GPIOMUX_DRV_2MA,
-	.pull = GPIOMUX_PULL_DOWN,
-};
-
 static struct gpiomux_setting atmel_int_act_cfg = {
 	.func = GPIOMUX_FUNC_GPIO,
 	.drv = GPIOMUX_DRV_8MA,
@@ -280,13 +269,6 @@ static struct msm_gpiomux_config msm_blsp_configs[] __initdata = {
 		.settings = {
 			[GPIOMUX_ACTIVE] = &gpio_cam_i2c_config,
 			[GPIOMUX_SUSPENDED] = &gpio_cam_i2c_config,
-		},
-	},
-	{
-		.gpio      = 78,	/* NFC CLK */
-		.settings = {
-			[GPIOMUX_ACTIVE] = &gpio_nfc_config,
-			[GPIOMUX_SUSPENDED] = &gpio_nfc_sus_config,
 		},
 	},
 };
