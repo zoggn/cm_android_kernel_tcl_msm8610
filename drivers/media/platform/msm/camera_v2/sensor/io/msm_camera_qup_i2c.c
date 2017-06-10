@@ -26,6 +26,10 @@
 #define I2C_COMPARE_MISMATCH 1
 #define I2C_POLL_MAX_ITERATION 20
 
+/*add by N.Kurkov for i2c transfer mutex lock, 2017/6/10.*/
+static struct mutex cam_mutex = __MUTEX_INITIALIZER(cam_mutex);
+/*end add by N.Kurkov.*/
+
 static int32_t msm_camera_qup_i2c_rxdata(
 	struct msm_camera_i2c_client *dev_client, unsigned char *rxdata,
 	int data_length)
@@ -46,9 +50,13 @@ static int32_t msm_camera_qup_i2c_rxdata(
 			.buf   = rxdata,
 		},
 	};
+/*add by N.Kurkov for i2c transfer mutex lock, 2017/6/10.*/
+    mutex_lock(&cam_mutex);
 	rc = i2c_transfer(dev_client->client->adapter, msgs, 2);
 	if (rc < 0)
 		S_I2C_DBG("msm_camera_qup_i2c_rxdata failed 0x%x\n", saddr);
+	mutex_unlock(&cam_mutex);
+/*end add by N.Kurkov.*/
 	return rc;
 }
 
@@ -66,9 +74,13 @@ static int32_t msm_camera_qup_i2c_txdata(
 			.buf = txdata,
 		 },
 	};
+/*add by N.Kurkov for i2c transfer mutex lock, 2017/6/10.*/
+    mutex_lock(&cam_mutex);
 	rc = i2c_transfer(dev_client->client->adapter, msg, 1);
 	if (rc < 0)
 		S_I2C_DBG("msm_camera_qup_i2c_txdata faild 0x%x\n", saddr);
+	mutex_unlock(&cam_mutex);
+/*end add by N.Kurkov.*/
 	return 0;
 }
 
