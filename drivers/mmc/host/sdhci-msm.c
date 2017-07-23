@@ -1341,6 +1341,7 @@ static struct sdhci_msm_pltfm_data *sdhci_msm_populate_pdata(struct device *dev)
 	int len, i;
 	int clk_table_len;
 	u32 *clk_table = NULL;
+    int ret = 0;
 	enum of_gpio_flags flags = OF_GPIO_ACTIVE_LOW;
 
 	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
@@ -1353,6 +1354,12 @@ static struct sdhci_msm_pltfm_data *sdhci_msm_populate_pdata(struct device *dev)
 	if (gpio_is_valid(pdata->status_gpio) & !(flags & OF_GPIO_ACTIVE_LOW))
 		pdata->caps2 |= MMC_CAP2_CD_ACTIVE_HIGH;
 
+      if (gpio_is_valid(pdata->status_gpio))
+              ret = gpio_tlmm_config(GPIO_CFG(pdata->status_gpio, 0, GPIO_CFG_INPUT,GPIO_CFG_PULL_UP, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
+       if (ret) {
+			pr_info("JCH: gpio-%d could not configure  !\n" , pdata->status_gpio);			
+    }    
+    
 	of_property_read_u32(np, "qcom,bus-width", &bus_width);
 	if (bus_width == 8)
 		pdata->mmc_bus_width = MMC_CAP_8_BIT_DATA;
