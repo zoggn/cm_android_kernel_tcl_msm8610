@@ -1137,6 +1137,17 @@
 		qcom,hw-settle-time = <0>;
 		qcom,fast-avg-setup = <0>;
 	};
+    
+	chan@B {
+		label = "chg_therm";
+		reg = <0x0B>;
+		qcom,decimation = <0>;
+		qcom,pre-div-channel-scaling = <0>;
+		qcom,calibration-type = "ratiometric";
+		qcom,scale-function = <1>;
+		qcom,hw-settle-time = <2>;
+		qcom,fast-avg-setup = <0>;
+	};    
 
 	chan@30 {
 		label = "batt_therm";

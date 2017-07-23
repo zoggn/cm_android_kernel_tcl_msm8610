@@ -397,14 +397,15 @@
 
 	#address-cells = <0>;
 	interrupt-parent = <&sdhc_2>;
-	interrupts = <0 1 2>;
+	interrupts = <0 1/* 2*/>;
 	#interrupt-cells = <1>;
 	interrupt-map-mask = <0xffffffff>;
 	interrupt-map = <0 &intc 0 125 0
 			1 &intc 0 221 0
-			2 &msmgpio 42 0x3>;
-	interrupt-names = "hc_irq", "pwr_irq", "status_irq";
-	cd-gpios = <&msmgpio 42 0x1>;
+			2 &msmgpio 42 0x3>;//modify for PIO1 GPIO modify from 94 to 42
+	interrupt-names = "hc_irq", "pwr_irq"/*, "status_irq"*/;
+	cd-gpios = <&msmgpio 42 0x1>;//modify for PIO1 GPIO modify from 94 to 42
+	// change by chenghui.jia  stop
 
 	status = "ok";
 };
