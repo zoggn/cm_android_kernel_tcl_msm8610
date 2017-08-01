@@ -1,7 +1,3 @@
-#ifdef CONFIG_MSMB_CAMERA_ZTE
-#include <media/msm_cam_sensor_zte.h>
-#else
-
 #ifndef __LINUX_MSM_CAM_SENSOR_H
 #define __LINUX_MSM_CAM_SENSOR_H
 
@@ -626,4 +622,3 @@ struct msm_camera_led_cfg_t {
 #define MSM_V4L2_PIX_FMT_META v4l2_fourcc('M', 'E', 'T', 'A') /* META */
 
 #endif /* __LINUX_MSM_CAM_SENSOR_H */
-#endif /* CONFIG_MSMB_CAMERA_ZTE */
