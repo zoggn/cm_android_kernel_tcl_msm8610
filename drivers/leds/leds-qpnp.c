@@ -252,11 +252,8 @@ enum qpnp_leds {
 	QPNP_ID_RGB_BLUE,
 	QPNP_ID_LED_MPP,
 	QPNP_ID_KPDBL,
-<<<<<<< HEAD
 	QPNP_ID_GPIO, // add by shicuiping for gpio control led
-=======
 	QPNP_ID_ATC,
->>>>>>> fa36c1680e4... leds: leds-qpnp: add ATC led support
 	QPNP_ID_MAX,
 };
 
