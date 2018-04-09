@@ -791,16 +791,16 @@ static int qpnp_mpp_set(struct qpnp_led_data *led)
 			}
 		}
 		if (led->mpp_cfg->pwm_mode == PWM_MODE) {
-			pwm_disable(led->mpp_cfg->pwm_cfg->pwm_dev);
 			// add by shicuiping for blink start
 			if( led->mpp_cfg->pwm_cfg->use_blink &&(led->cdev.brightness<LED_FULL))
 				duty_us = led->cdev.blink_delay_on *1000;
 			else
 			// add by shicuiping for blink stop
-			duty_us = (led->mpp_cfg->pwm_cfg->pwm_period_us *
- 					led->cdev.brightness *
+ 			duty_us = (led->mpp_cfg->pwm_cfg->pwm_period_us *
+					led->cdev.brightness *
 					NSEC_PER_USEC) / LED_FULL *
 					backlight_scale / MAX_BACKLIGHT_SCALE;
+			pwm_disable(led->mpp_cfg->pwm_cfg->pwm_dev);
 			// add by shicuiping for blink start
 			if(led->mpp_cfg->pwm_cfg->use_blink&&(duty_us==led->mpp_cfg->pwm_cfg->pwm_period_us))
 			{
@@ -809,9 +809,10 @@ static int qpnp_mpp_set(struct qpnp_led_data *led)
 			}
 			// add by shicuiping for blink stop
 			/*config pwm for brightness scaling*/
-			rc = pwm_config_us(led->mpp_cfg->pwm_cfg->pwm_dev,
+			rc = pwm_config(led->mpp_cfg->pwm_cfg->pwm_dev,
 					duty_us,
-					led->mpp_cfg->pwm_cfg->pwm_period_us);
+					led->mpp_cfg->pwm_cfg->pwm_period_us *
+						NSEC_PER_USEC);
 			if (rc < 0) {
 				dev_err(&led->spmi_dev->dev, "Failed to " \
 					"configure pwm for new values\n");
