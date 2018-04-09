@@ -812,7 +812,6 @@ static int qpnp_mpp_set(struct qpnp_led_data *led)
 			rc = pwm_config_us(led->mpp_cfg->pwm_cfg->pwm_dev,
 					duty_us,
 					led->mpp_cfg->pwm_cfg->pwm_period_us);
-			printk("rc value now: ",rc);
 			if (rc < 0) {
 				dev_err(&led->spmi_dev->dev, "Failed to " \
 					"configure pwm for new values\n");
