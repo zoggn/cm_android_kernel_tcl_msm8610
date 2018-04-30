@@ -451,11 +451,10 @@
 		compatible = "qcom,bcl";
 	};
 
-	/* ZTE_MODIFY caoyaobin change from 61 MB of memblock-remove to 46MB */
+	/* zoggn change from 46 MB of memblock-remove to 50MB */
 	qcom,msm-mem-hole {
 		compatible = "qcom,msm-mem-hole";
-		qcom,memblock-remove = <0x08800000 0x2E00000>,
-				<0x0C500000 0x1900000>; /* Address and Size of Hole */
+		qcom,memblock-remove = <0x08800000 0x5600000>; /* Address and Size of Hole */
 	};
 
 	qcom,wdt@f9017000 {
