@@ -792,7 +792,7 @@ static int qpnp_mpp_set(struct qpnp_led_data *led)
 		}
 		if (led->mpp_cfg->pwm_mode == PWM_MODE) {
 			// add by shicuiping for blink start
-			if( led->mpp_cfg->pwm_cfg->use_blink &&(led->cdev.brightness * NSEC_PER_USEC<LED_FULL))
+			if( led->mpp_cfg->pwm_cfg->use_blink &&(led->cdev.brightness<LED_FULL))
 				duty_us = led->cdev.blink_delay_on *1000;
 			else
 			// add by shicuiping for blink stop
